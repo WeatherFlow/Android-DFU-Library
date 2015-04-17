@@ -1354,6 +1354,13 @@ public abstract class DfuBaseService extends IntentService {
 					// Send 'jump to bootloader command' (Start DFU)
 					updateProgressNotification(PROGRESS_ENABLING_DFU_MODE);
 					OP_CODE_START_DFU[1] = 0x04;
+					
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					
 					logi("Sending Start DFU command (Op Code = 1, Upload Mode = 4)");
 					writeOpCode(gatt, controlPointCharacteristic, OP_CODE_START_DFU, true);
 					sendLogBroadcast(LOG_LEVEL_APPLICATION, "Jump to bootloader sent (Op Code = 1, Upload Mode = 4)");
