@@ -626,6 +626,9 @@ public abstract class DfuBaseService extends IntentService {
 	private boolean mRemoteErrorOccurred;
 	private boolean mPaused;
 	private boolean mAborted;
+	
+	private boolean mRebooted;
+	
 	/**
 	 * Latest data received from device using notification.
 	 */
@@ -770,7 +773,7 @@ public abstract class DfuBaseService extends IntentService {
 		@Override
 		public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
 			if (status == BluetoothGatt.GATT_SUCCESS) {
-				logi("Services discovered");
+				logi("DfuBaseService-Services discovered");
 				mConnectionState = STATE_CONNECTED_AND_READY;
 			} else {
 				loge("Service discovery error: " + status);
@@ -1275,6 +1278,8 @@ public abstract class DfuBaseService extends IntentService {
 				 *  In the DFU from SDK 6.1, which was also supporting the buttonless update, there was no DFU Version characteristic. In that case we may find out whether
 				 *  we are in the bootloader or application by simply checking the number of characteristics.
 				 */
+				boolean isWF = true;
+				if (isWF) {
 				if (version == 1 || (version == 0 && gatt.getServices().size() > 3 /* No DFU Version char but more services than Generic Access, Generic Attribute, DFU Service */)) {
 					// The service is connected to the application, not to the bootloader
 					logw("Application with buttonless update found");
@@ -1392,6 +1397,36 @@ public abstract class DfuBaseService extends IntentService {
 					newIntent.fillIn(intent, Intent.FILL_IN_COMPONENT | Intent.FILL_IN_PACKAGE);
 					startService(newIntent);
 					return;
+				}
+				} else if (!isWF && !mRebooted) {
+					Log.d("DfuBaseService","non-standard path");
+					UUID mainServiceUUID = UUID.fromString("00000100-1212-EFDE-1523-785FEABC0CEB");
+					final BluetoothGattService mainService = gatt.getService(mainServiceUUID);
+					UUID dfuReset = UUID.fromString("00000106-1212-EFDE-1523-785FEABC0CEB");
+					final BluetoothGattCharacteristic dfuResetCharacteristic = mainService.getCharacteristic(dfuReset);
+					byte[] dataByte = {(byte) 0xb1, (byte) 0xc9, 0x5e, 0x1d};
+					
+					Log.d("DfuBaseService", dfuReset + "|" + dfuResetCharacteristic + "|" + dataByte);
+					
+					writeOpCode(gatt, dfuResetCharacteristic, dataByte, true);
+					
+					waitUntilDisconnected();
+					
+					mRebooted = true;
+					
+					try {
+						Thread.sleep(10000);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					logi("Starting service that will connect to the DFU bootloader");
+					final Intent newIntent = new Intent();
+					newIntent.fillIn(intent, Intent.FILL_IN_COMPONENT | Intent.FILL_IN_PACKAGE);
+					startService(newIntent);
+					return;
+					
 				}
 
 				// Enable notifications
